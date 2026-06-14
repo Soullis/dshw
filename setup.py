@@ -24,6 +24,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            "apf_nav = dshw.apf.apf_nav:main",
+            "mock_pub = dshw.apf.mock_pub:main",
+            "gauge_pub = dshw.gauge.gauge_pub:main",
         ],
     },
 )
