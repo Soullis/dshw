@@ -1,4 +1,4 @@
-# dshw
+# Drone Show, São Paulo - Live demonstration
 
 **Autonomous obstacle avoidance and gauge reading for a MAVROS drone, built as a ROS 2 package and presented at Drone Show 2026.**
 
@@ -338,15 +338,3 @@ These are the rough edges of the code as presented. None of them are hidden by t
 - **DWA image width is hardcoded.** `dwa_math.py` normalises with `160.0`, while the rest of the package uses `WIDTH = 424`.
 - **DWA ignores `obstacle_detected`** and keeps using the last bounding boxes it received.
 - **Package metadata is a placeholder.** `package.xml` and `setup.py` still say `TODO` for description and license, and `package.xml` declares no runtime dependencies, so `rosdep install` will not pull any in.
-
----
-
-## Authors and license
-
-Developed by **Gabriel Solis** ([@Soullis](https://github.com/Soullis)).
-
-**Gauge model:** developed by Black Bee Drones for the [SAE Brasil 2026 faulty-gauge task](https://github.com/Black-Bee-Drones/SAE-2026/tree/master/faulty_or_not).
-
-**Obstacle perception:** powered by [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector).
-
-**License:** not yet declared. <!-- TODO: choose a license, add a LICENSE file, and update package.xml and setup.py. -->
