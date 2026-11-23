@@ -2,9 +2,9 @@
 
 **Autonomous obstacle avoidance and gauge reading for a MAVROS drone, built as a ROS 2 package and presented at Drone Show 2026.**
 
-[▶ Watch the demo video](VIDEO_URL)
+![Black Bee Drones team at Drone Show 2026](assets/team.JPG)
 
-<!-- TODO: add event details here (full event name, date, city) and a one-line summary of what was flown on stage. -->
+[▶ Watch the obstacle-avoidance demo](assets/demo_avoidance.mp4)
 
 `dshw` is a small ROS 2 (`ament_python`) package that sits on top of the [nectar SDK](https://github.com/Black-Bee-Drones/nectar-sdk). It contains:
 
@@ -12,21 +12,24 @@
 - **A gauge-reading node** that runs a YOLO model (`best.pt`) on a live camera feed and publishes the annotated result as a compressed image.
 - **A mock publisher** to check topic plumbing without any hardware.
 
+The gauge model was developed by **Black Bee Drones** for the [SAE Brasil AeroDesign 2026 faulty-gauge task](https://github.com/Black-Bee-Drones/SAE-2026/tree/master/faulty_or_not) and is available on [Hugging Face](https://huggingface.co/blackbeedrones/manometer-sae26). The navigation nodes consume obstacle detections published by the external [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector) project.
+
 ---
 
 ## Table of contents
 
 1. [What's in the package](#whats-in-the-package)
 2. [System overview](#system-overview)
-3. [Requirements](#requirements)
-4. [Build](#build)
-5. [Running](#running)
-6. [Testing without hardware](#testing-without-hardware)
-7. [Configuration](#configuration)
-8. [How it works](#how-it-works)
-9. [Repository layout](#repository-layout)
-10. [Known issues](#known-issues)
-11. [Authors and license](#authors-and-license)
+3. [Models and external components](#models-and-external-components)
+4. [Requirements](#requirements)
+5. [Build](#build)
+6. [Running](#running)
+7. [Testing without hardware](#testing-without-hardware)
+8. [Configuration](#configuration)
+9. [How it works](#how-it-works)
+10. [Repository layout](#repository-layout)
+11. [Known issues](#known-issues)
+12. [Authors and license](#authors-and-license)
 
 ---
 
@@ -47,18 +50,38 @@ All four are registered as console scripts, so you launch them with `ros2 run ds
 
 ```mermaid
 flowchart LR
-    DEPTH["Depth camera<br/>/camera/camera/depth/image_rect_raw"] --> OD["obstacle_detection<br/>(external node, not in this repo)"]
-    OD -->|"/obstacle_detection/obstacle_bboxes<br/>/obstacle_detection/obstacle_detected"| NAV["apf_nav or dwa_nav"]
+    DEPTH["Depth camera<br/>/camera/camera/depth/image_rect_raw"] --> OD["depth-obstacle-detector<br/>(external node)"]
+    OD -->|" /obstacle_detection/obstacle_bboxes<br/>/obstacle_detection/obstacle_detected "| NAV["apf_nav or dwa_nav"]
     VIO["Vision pose<br/>/mavros/vision_pose/pose_cov"] --> MAV["MavrosDrone<br/>(nectar SDK) + MAVROS"]
     MAV -->|"position"| NAV
     NAV -->|"velocity setpoints (BODY frame)"| MAV
     MAV --> FCU["Flight controller"]
 
-    CAM["USB camera<br/>/dev/video0"] --> GAUGE["gauge_pub<br/>(YOLO best.pt)"]
+    CAM["USB camera<br/>/dev/video0"] --> GAUGE["gauge_pub<br/>(YOLO gauge model)"]
     GAUGE --> OUT["gauge/reading/compressed"]
 ```
 
-The navigation nodes **do not** detect obstacles themselves. They consume bounding boxes from an obstacle-detection node that must already be running (see [Requirements](#requirements)).
+The navigation nodes **do not detect obstacles themselves**. They consume bounding boxes from the external [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector), which must already be running (see [Requirements](#requirements)).
+
+---
+
+## Models and external components
+
+### Gauge-reading model
+
+The YOLO model used by `gauge_pub` was developed by **Black Bee Drones** for the faulty-gauge identification task in [SAE Brasil 2026](https://github.com/Black-Bee-Drones/SAE-2026/tree/master/faulty_or_not).
+
+- **Model:** [blackbeedrones/manometer-sae26](https://huggingface.co/blackbeedrones/manometer-sae26)
+- **Task implementation and training project:** [SAE-2026/faulty_or_not](https://github.com/Black-Bee-Drones/SAE-2026/tree/master/faulty_or_not)
+- **Integration in this package:** `dshw/gauge/gauge_pub.py`
+
+The model is loaded through `nectar.ai.detection.Detector` with the Ultralytics framework. The repository currently includes a copy of the model weights at `dshw/models/best.pt`.
+
+### Obstacle detection
+
+Obstacle perception is provided by the external [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector) project. It processes depth-camera information and publishes obstacle bounding boxes for the APF and DWA navigation nodes. This detector is a separate project and is **not included** in this repository.
+
+The expected ROS topics and message formats are documented below in [Topics the navigation nodes expect](#topics-the-navigation-nodes-expect).
 
 ---
 
@@ -81,7 +104,7 @@ The navigation nodes **do not** detect obstacles themselves. They consume boundi
 | Ubuntu + ROS 2 <!-- TODO: confirm distro (the committed bytecode is cpython-312, i.e. Ubuntu 24.04 / ROS 2 Jazzy) --> | Runtime and build (`colcon`) |
 | MAVROS (`mavros`, `mavros_extras`) and its GeographicLib datasets | Link to the flight controller |
 | [nectar SDK](https://github.com/Black-Bee-Drones/nectar-sdk) | `nectar.control` (`MavrosDrone`, `DroneFactory`, `MoveReference`, `MavrosConfig`, `SITL_VISION_CONFIG`) and `nectar.ai.detection` (`Detector`) |
-| An obstacle-detection node | Must publish the two topics listed below. Not part of this repo. |
+| [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector) | Depth-based obstacle perception; publishes the obstacle topics consumed by the navigation nodes |
 | Python: `numpy`, `opencv-python`, `ultralytics` (+ `torch`) | Navigation math, camera capture, YOLO inference |
 | ROS message packages: `std_msgs`, `geometry_msgs`, `sensor_msgs` | Topic types |
 
@@ -94,7 +117,7 @@ The navigation nodes **do not** detect obstacles themselves. They consume boundi
 | `/obstacle_detection/obstacle_bboxes` | `std_msgs/Float32MultiArray` | `apf_nav`, `dwa_nav` | Flat array of **5 floats per obstacle cluster**. Index 0 and 1 are the horizontal pixel extents of the box, index 4 is the obstacle depth in metres. Indices 2 and 3 are not read by this package. |
 | `/obstacle_detection/obstacle_detected` | `std_msgs/Bool` | `apf_nav` only | When `false`, `apf_nav` ignores the bounding boxes. |
 
-The `obstacle_detection` prefix comes from `OBSTACLE_NS` in `dshw/constants.py`.
+The `obstacle_detection` prefix comes from `OBSTACLE_NS` in `dshw/constants.py`. Configure the external detector to publish the expected topic names and message formats.
 
 ---
 
@@ -123,7 +146,7 @@ Use `--symlink-install`. Without it, the `dshw.dwa` subpackage is not installed 
 
 - MAVROS is connected to the flight controller and publishing.
 - The vision pose is being fed to `/mavros/vision_pose/pose_cov` and the pose estimate is good.
-- The depth camera and your obstacle-detection node are running and publishing the topics above.
+- The depth camera and the [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector) node are running and publishing the topics above.
 - **The vehicle is already armed, airborne and in a mode that accepts velocity setpoints.** `apf_nav` and `dwa_nav` never arm or take off; the `TAKEOFF_*` constants in `constants.py` are currently unused.
 - The drone is facing the `+X` direction of the local frame (see [How it works](#how-it-works)).
 
@@ -264,10 +287,10 @@ Obstacles are turned into 2D points in the body frame from their depth and horiz
 
 1. Grab a frame from the V4L2 camera at `LOOP_HZ`.
 2. Cut it into overlapping square crops (side = the shorter image dimension, 30% overlap) so a wide frame is not squashed.
-3. Run the YOLO model (`dshw/models/best.pt`, loaded through `nectar.ai.detection.Detector` with the `ultralytics` framework) on every crop and keep the most confident detection above `0.5`.
+3. Run the YOLO model (`dshw/models/best.pt`) on every crop and keep the most confident detection above `0.5`.
 4. Draw `<confidence>% <class_id>` on the annotated crop, publish it as JPEG on `gauge/reading/compressed`, and save it to `~/ros2_ws/src/saved_images/dshw/<timestamp>.jpg`.
 
-<!-- TODO: document what the model's classes mean (what does each class_id correspond to on the gauge?) and how the model was trained. -->
+The model was trained for the SAE Brasil 2026 faulty-gauge task. See [the model on Hugging Face](https://huggingface.co/blackbeedrones/manometer-sae26) and its [training/task implementation](https://github.com/Black-Bee-Drones/SAE-2026/tree/master/faulty_or_not).
 
 ---
 
@@ -275,6 +298,10 @@ Obstacles are turned into 2D points in the body frame from their depth and horiz
 
 ```text
 dshw/
+├── assets/
+│   ├── demo_avoidance.mp4  # obstacle-avoidance demo
+│   ├── team.JPG            # team/event photo used above
+│   └── hero.CR2            # original RAW photo
 ├── dshw/
 │   ├── constants.py        # shared navigation / camera constants
 │   ├── apf/
@@ -318,6 +345,8 @@ These are the rough edges of the code as presented. None of them are hidden by t
 
 Developed by **Gabriel Solis** ([@Soullis](https://github.com/Soullis)).
 
-<!-- TODO: team / credits, and acknowledgements (sponsors, event organisers). -->
+**Gauge model:** developed by Black Bee Drones for the [SAE Brasil 2026 faulty-gauge task](https://github.com/Black-Bee-Drones/SAE-2026/tree/master/faulty_or_not).
+
+**Obstacle perception:** powered by [depth-obstacle-detector](https://github.com/lipe-pedras/depth-obstacle-detector).
 
 **License:** not yet declared. <!-- TODO: choose a license, add a LICENSE file, and update package.xml and setup.py. -->
