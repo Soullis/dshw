@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, Bool
 from geometry_msgs.msg import PoseStamped
 import numpy as np
 
@@ -66,6 +66,17 @@ class ApfNavigationNode(Node):
             10
         )
 
+        self.is_obstacle_detected = False
+
+        # 2. Setup the new subscriber
+        detected_topic = f"/{OBSTACLE_NS}/obstacle_detected"
+        self.detected_sub = self.create_subscription(
+            Bool,
+            detected_topic,
+            self.detected_callback,
+            10
+        )
+
         self.get_logger().info(
             f"[ApfNavigationNode] Initialized. goal={GOAL_M}, k_att={K_ATT:.2f}, "
             f"k_rep={K_REP:.2f}, v_max={V_MAX:.2f}"
@@ -82,8 +93,9 @@ class ApfNavigationNode(Node):
 
     def bbox_callback(self, msg: Float32MultiArray):
         self.latest_bboxes = list(msg.data)
-        self.get_logger().info(f"Received bounding boxes.")
-
+    
+    def detected_callback(self, msg: Bool):
+        self.is_obstacle_detected = msg.data
 
     # ── Control Loop ──────────────────────────────────────────────
     def control_loop(self):
@@ -110,7 +122,10 @@ class ApfNavigationNode(Node):
             self.get_logger().warning("Received coordinate type that is not a local PoseStamped!")
             return
 
-        bboxes = list(self.latest_bboxes)
+        if self.is_obstacle_detected:
+            bboxes = list(self.latest_bboxes)
+        else:
+            bboxes = []
 
         dist_to_goal = np.linalg.norm(GOAL_M - pos)
         if dist_to_goal < GOAL_TOL:
@@ -131,7 +146,7 @@ class ApfNavigationNode(Node):
                 self.drone.move_velocity(
                     f_total[0], 
                     f_total[1], 
-                    f_total[2], 
+                    0.0, 
                     0.0, 
                     reference=MoveReference.BODY
                 )
@@ -141,8 +156,8 @@ class ApfNavigationNode(Node):
         
         num_clusters = len(bboxes) // 5
         self.get_logger().info(
-            f"APF Output -> vx: {f_total[0]:.3f}, vy: {f_total[1]:.3f}, vz: {f_total[2]:.3f} | "
-            f"Obs Count: {num_clusters} | Dist to Goal: {dist_to_goal:.2f}m"
+            f"APF Output -> vx: {f_total[0]:.3f}, vy: {f_total[1]:.3f} | "
+            f"Obs Count: {num_clusters} | Dist to Goal: {dist_to_goal:.2f}m | "
         )
 
     def stop_drone_and_shutdown(self):

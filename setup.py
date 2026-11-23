@@ -27,6 +27,7 @@ setup(
             "apf_nav = dshw.apf.apf_nav:main",
             "mock_pub = dshw.apf.mock_pub:main",
             "gauge_pub = dshw.gauge.gauge_pub:main",
+            "dwa_nav = dshw.dwa.dwa_nav:main",
         ],
     },
 )

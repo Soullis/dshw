@@ -6,7 +6,7 @@ from dshw.constants import (
     K_REP,
     D0,
     WIDTH,
-    HEIGHT
+    HEIGHT,
 )
 
 def attractive_force(pos: np.ndarray) -> np.ndarray:
@@ -34,10 +34,13 @@ def repulsive_force(bboxes: list) -> np.ndarray:
 
         # Normalizing image center offsets to [-1, 1]
         img_cx_norm = ((bboxes[idx + 0] + bboxes[idx + 1]) * 0.5 - (WIDTH / 2)) / (WIDTH / 2)
-        img_cy_norm = ((bboxes[idx + 2] + bboxes[idx + 3]) * 0.5 - (HEIGHT / 2)) / (HEIGHT / 2)
 
         # Repulsion vector in body frame (x=forward, y=left, z=up)
-        direction = np.array([-1.0, -img_cx_norm, -img_cy_norm])
+        direction = np.array([
+            -1.0, 
+            img_cx_norm, 
+            0
+        ])
         
         # Normalize the direction vector
         norm = np.linalg.norm(direction)
